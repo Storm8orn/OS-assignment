@@ -1,0 +1,118 @@
+#include<stdio.h>
+#include<pthread.h>
+#include<stdbool.h>
+	//pen=0 	paper=1 	question_paper=2
+pthread_mutex_t m;
+int flag;
+bool items[3];
+char *items_name[3]={"Pen","Paper","QuestionPaper"};
+char student_item;
+int fd[2];
+int i=0,pid[3],s_item=-1,input;
+char *already_item;
+char* get_item_name(int item)
+{
+	already_item=items_name[item];
+	pthread_exit(already_item);
+}
+void* check_item(int item)
+{
+	int i,count=0;
+	printf("Acquiring Items....\n");
+	pthread_mutex_lock(&m);
+	items[item]=true;
+	for(i=0;i<3;i++)
+	{
+		if(items[i]==true)
+			count++;
+	}
+	items[item]=false;
+	if(count!=3)
+	{
+		flag=0;
+		printf("I already have %s, I cant take items\n",items_name[item]);
+		printf("Duplicate Items Cant Acquire\n");
+	}
+	else
+	{
+		flag=1;
+		printf("I have %s, I can complete my assignement\n",items_name[item]);
+		printf("Items Acquired\n");
+	}
+	pthread_mutex_unlock(&m);
+	pthread_exit(flag);
+}
+int main()
+{
+	int loop=1;
+	for(i=0;i<3;i++)
+		items[i]=false;
+	while(loop==1)
+	{
+		s_item=-1;
+		printf("I am Teacher With PID %d\n\n",getpid());
+		printf("Give Values Of Items\n");
+		printf("1.Pen & Paper\n");
+		printf("2.Pen & QuestionPaper\n");
+		printf("3.Paper & QuestionPaper\n");
+		A:scanf("%d",&input);
+		switch(input)
+		{
+			case 1: items[0]=true;
+				items[1]=true;
+				items[2]=false;
+				printf("Items On Table are Pen and Paper\n");
+			break;
+			case 2:	items[0]=true;
+				items[1]=false;
+				items[2]=true;
+				printf("Items On Table are Pen and QuestionPaper\n");
+			break;
+			case 3: items[0]=false;
+				items[1]=true;
+				items[2]=true;
+				printf("Items On Table are Paper and QuestionPaper\n");
+			break;
+			default: printf("Invalid Input Input Again\n");
+				 goto A;
+		}
+		pipe(fd);
+		for(i=0;i<3;i++)	
+		{
+			pid[i]=fork();
+			s_item=s_item+1;
+			if(pid[i]==0)
+			{
+				char *already_item;
+				pthread_t *t1,*t2;
+				pthread_create(&t1,NULL,get_item_name,s_item);
+				pthread_join(t1,(void *)&already_item);
+				printf("I am Student with ID %d having item %s\n",getpid(),already_item);
+				pthread_create(&t2,NULL,check_item,s_item);
+				pthread_join(t2,flag);
+				if(flag==1)
+				{
+					student_item=s_item;
+					close(fd[0]);
+					write(fd[1],&student_item,sizeof(student_item));
+					close(fd[1]);
+				}
+				exit(0);
+			}
+			printf("\n");
+			wait();
+		}
+		printf("\n");
+		close(fd[1]);
+		read(fd[0],&student_item,sizeof(student_item));
+		close(fd[0]);
+		if(student_item==0)
+			printf("Student with ID %d having Pen took Paper and QuestionPaper from Table\n",pid[0]);
+		else if(student_item==1)
+			printf("Student with ID %d having Paper took Pen and QuestionPaper from Table\n",pid[1]);
+		else 
+			printf("Student with ID %d having QuestionPaper took Pen and Paper from Table\n",pid[2]);
+		printf("\nPress 1 if Teacher Want to put more items or other to exit\n");
+			scanf("%d",&loop);
+	}
+	return 0;
